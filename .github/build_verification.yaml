@@ -1,0 +1,54 @@
+name: Build Verification
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: npm install
+
+      - name: Set environment variables
+        if: ${{ inputs.env_vars }}
+        shell: bash
+        run: |
+          for i in "${{ inputs.env_vars }}"
+          do
+            printf "%s\n" $i >> $GITHUB_ENV
+            printf "%s\n" $i >> .env
+          done
+
+      - name: view the secrets context
+        shell: bash
+        run: echo "$SECRETS_CONTEXT" | jq -r 'keys[] as $k | "\($k)=\(.[$k])"' >> $GITHUB_ENV
+        env:
+          SECRETS_CONTEXT: ${{ toJson(secrets) }}
+
+      - name: Check env vars
+        run: |
+          echo "VAR1=$VAR1"
+          echo "VAR2=$VAR2"
+
+      - name: Build Next.js App
+        run: npm run build
+
+      - name: Run AI Review Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python .github/scripts/review.py
+
+      # - name: AI Code Review Action
+      #   uses: aidar-freeed/ai-codereviewer@v2.7.0
+      #   with:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      #     OPENAI_API_MODEL: "gpt-4" # Optional: defaults to "gpt-4"
+      #     exclude: "**/*.json, **/*.md" # Optional: exclude patterns separated by commas
